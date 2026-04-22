@@ -27,7 +27,7 @@ git clone --branch v0.1.0 https://github.com/<you>/ai-weekly-update.git \
 ```
 init ai-weekly-update
 ```
-Claude asks for your Slack mode, GitHub orgs, AI keywords, and whether to scan Claude Code logs. Writes `config/user.json` (gitignored).
+Claude asks for your Slack mode, GitHub orgs, AI keywords, and whether to scan Claude Code logs. Writes `${XDG_CONFIG_HOME:-$HOME/.config}/ai-weekly-update/user.json` — outside the skill install dir so plugin upgrades don't wipe your config.
 
 **Each week:**
 ```

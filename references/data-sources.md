@@ -2,7 +2,7 @@
 
 Five sources feed each draft. Fire them in parallel once the date window and the user's column targets are known.
 
-## `config/user.json` schema
+## `${XDG_CONFIG_HOME:-$HOME/.config}/ai-weekly-update/user.json` schema
 
 Per-user file, auto-produced by Phase 0 init and gitignored. Not meant to be hand-edited — re-run init instead.
 
@@ -99,7 +99,7 @@ Requires `gh` authenticated with `repo` scope. Two modes via `scripts/search_git
 **PRs — authored PRs, optionally AI-filtered, optionally team-fanned-out:**
 ```
 scripts/search_github.py prs \
-  --config config/user.json \
+  --config ${XDG_CONFIG_HOME:-$HOME/.config}/ai-weekly-update/user.json \
   --start <YYYY-MM-DD> --end <YYYY-MM-DD> \
   [--state merged|open|all] \
   [--ai-filter] \
@@ -117,7 +117,7 @@ Add `--ai-filter` to restrict to PRs whose title/body match your `ai_keywords` �
 **Commits — authored commits in window:**
 ```
 scripts/search_github.py commits \
-  --config config/user.json \
+  --config ${XDG_CONFIG_HOME:-$HOME/.config}/ai-weekly-update/user.json \
   --start <YYYY-MM-DD> --end <YYYY-MM-DD> \
   [--ai-filter] \
   [--include-team]
@@ -169,7 +169,7 @@ Output includes:
 
 ## Parallelization
 
-All five sources are independent within a window. Fire them in one batched message when possible. Cache raw JSON under `.cache/<pageId>/<YYYY-MM-DD>/` so re-runs don't re-query. Cache is deleted on successful publish.
+All five sources are independent within a window. Fire them in one batched message when possible. Cache raw JSON under `${XDG_CACHE_HOME:-$HOME/.cache}/ai-weekly-update/<pageId>/<YYYY-MM-DD>/` so re-runs don't re-query. Cache is deleted on successful publish.
 
 ## Attribution discipline
 

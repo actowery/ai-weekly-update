@@ -9,15 +9,26 @@ This skill fills the current user's individual row on a shared AI-usage weekly-r
 
 Designed for people reporting on their own (and their team's) AI / Claude adoption — skills shipped, integrations landed, adoption signals, blockers.
 
+## Config & cache locations
+
+Paths used throughout this skill (override via env vars if needed):
+
+- **User config**: `${XDG_CONFIG_HOME:-$HOME/.config}/ai-weekly-update/user.json`
+- **Research cache**: `${XDG_CACHE_HOME:-$HOME/.cache}/ai-weekly-update/<pageId>/<YYYY-MM-DD>/`
+
+These paths are user-writable and persist across plugin upgrades. The skill must never write to its own install directory — that location gets wiped on upgrade.
+
+**Legacy locations** (dev/standalone use): the old `${XDG_CONFIG_HOME:-$HOME/.config}/ai-weekly-update/user.json` relative to the skill directory is still read as a fallback if the XDG location is absent. New configs write to XDG.
+
 ## What this skill does and does not do (blast radius at a glance)
 
 | Action | Scope | When |
 |---|---|---|
 | Call `updateConfluencePage` (publish to live page) | Remote write | Phase 8, ONLY after explicit `approve` |
-| Write `config/user.json` | Local write | Phase 0 init — path announced first |
-| Write `/tmp/ai-weekly-preview-*.html`, `modified.json`, drafts JSON, `.cache/` | Local writes | Phases 4, 6, 7 |
+| Write `${XDG_CONFIG_HOME:-$HOME/.config}/ai-weekly-update/user.json` | Local write | Phase 0 init — path announced first |
+| Write `/tmp/ai-weekly-preview-*.html`, `modified.json`, drafts JSON, research cache under `${XDG_CACHE_HOME:-$HOME/.cache}/ai-weekly-update/` | Local writes | Phases 4, 6, 7 |
 | Read page / Jira / Slack / email / GitHub / local Claude session logs | Remote reads only | Phases 1, 4 |
-| Read team members' Jira / Slack / GitHub activity | Remote reads only | Phase 4, ONLY if `team.members` is set in `config/user.json` |
+| Read team members' Jira / Slack / GitHub activity | Remote reads only | Phase 4, ONLY if `team.members` is set in `${XDG_CONFIG_HOME:-$HOME/.config}/ai-weekly-update/user.json` |
 | Run `open <path>` to launch browser | Local | Phase 7 |
 | Send messages, comment on tickets, post to Slack/email | **Never** | — |
 | Touch rows belonging to other people or divider rows (`Puppet`, `Delphix`) | **Never** | — |
@@ -50,7 +61,7 @@ If any are missing, the skill still runs; it reports which sources it couldn't r
 
 Trigger: user says `init ai-weekly-update`, "set up my AI weekly config", or similar.
 
-**Side effects:** read-only MCP calls (`atlassianUserInfo`, `slack_search_users`, `lookupJiraAccountId`); writes `config/user.json` locally after user confirmation.
+**Side effects:** read-only MCP calls (`atlassianUserInfo`, `slack_search_users`, `lookupJiraAccountId`); writes `${XDG_CONFIG_HOME:-$HOME/.config}/ai-weekly-update/user.json` locally after user confirmation.
 
 1. Call `atlassianUserInfo` once. Capture `name`, `email`, `account_id`.
 2. Resolve the user's Slack user ID via `slack_search_users`, confirming on email match.
@@ -64,10 +75,10 @@ Trigger: user says `init ai-weekly-update`, "set up my AI weekly config", or sim
    Are you a manager with a team?           (yes / no)
    ```
 5. If manager-yes:
-   - Check `~/.claude/skills/weekly-confluence-update/config/teams/*.json` — if any exist, offer to import one: "Found DevX roster at `weekly-confluence-update/config/teams/devx.json`. Use this for AI weekly team research too? (yes / name a different team / no — gather inline)"
+   - Check `${XDG_CONFIG_HOME:-$HOME/.config}/weekly-confluence-update/teams/*.json` — if any exist, offer to import one: "Found DevX roster at `$XDG_CONFIG_HOME/weekly-confluence-update/teams/devx.json`. Use this for AI weekly team research too? (yes / name a different team / no — gather inline)"
    - Otherwise ask for team member names; resolve each to Atlassian+Slack+GitHub IDs the same way the team-level skill does (parallel `lookupJiraAccountId` + `slack_search_users` + `gh api orgs/<org>/teams/<slug>/members` if the team has a GitHub team name).
    - Store under `team.members` in `user.json`. Each member needs at minimum `display_name`; add whichever IDs we could resolve.
-6. Save `config/user.json` following the schema in `references/data-sources.md`. Announce the path before writing.
+6. Save `${XDG_CONFIG_HOME:-$HOME/.config}/ai-weekly-update/user.json` following the schema in `references/data-sources.md`. Announce the path before writing.
 
 Do not invent values. Empty answers are acceptable. If `team` is absent or empty, the skill runs in personal-only mode.
 
@@ -75,7 +86,7 @@ Do not invent values. Empty answers are acceptable. If `team` is absent or empty
 
 **Side effects:** read-only Atlassian calls.
 
-1. Load `config/user.json` if present; otherwise run Phase 0 first.
+1. Load `${XDG_CONFIG_HOME:-$HOME/.config}/ai-weekly-update/user.json` if present; otherwise run Phase 0 first.
 2. Call `atlassianUserInfo` to confirm display name hasn't changed.
 3. Resolve `cloudId` from the page URL hostname; fetch the page in ADF.
 4. If ADF is large (common), the MCP will save it to a file — pass that path to the parser.
@@ -116,14 +127,14 @@ Extract from the page title (e.g. `AI Weekly Report for 14 Apr - 18 Apr 2026`) v
 
 ### Phase 4 — Research the week (AI-focused)
 
-**Side effects:** read-only across all sources. Writes `.cache/<pageId>/<YYYY-MM-DD>/` locally.
+**Side effects:** read-only across all sources. Writes `${XDG_CACHE_HOME:-$HOME/.cache}/ai-weekly-update/<pageId>/<YYYY-MM-DD>/` locally.
 
 **Announce sources up front, explicitly calling out team fan-out if present:**
 > Researching <window>. Sources: Jira (AI labels/keywords, you + team members <names if any>), Slack (**public + private** per config, you + team), Outlook (AI keywords, your inbox only), GitHub (PRs + commits in orgs: <orgs>, you + team), Claude Code logs (your local `~/.claude/projects/` only). Reply `public only` to downgrade Slack this run. Reply `no team` to run personal-only this run.
 
-Run these in parallel; cache results under `.cache/<pageId>/<YYYY-MM-DD>/`.
+Run these in parallel; cache results under `${XDG_CACHE_HOME:-$HOME/.cache}/ai-weekly-update/<pageId>/<YYYY-MM-DD>/`.
 
-**Team-mode note:** if `config/user.json` has `team.members[]`, every remote query EXCEPT Outlook and Claude-Code-logs fans out to include team members. Outlook searches only the user's own mailbox (no delegated access). Claude Code logs are local to the user. Tag every result with the `display_name` of the member it came from.
+**Team-mode note:** if `${XDG_CONFIG_HOME:-$HOME/.config}/ai-weekly-update/user.json` has `team.members[]`, every remote query EXCEPT Outlook and Claude-Code-logs fans out to include team members. Outlook searches only the user's own mailbox (no delegated access). Claude Code logs are local to the user. Tag every result with the `display_name` of the member it came from.
 
 **Jira.** AI/Claude tickets assigned to you OR any team member:
 ```
@@ -143,11 +154,11 @@ If `team.members` is empty, drop the IN-list and use `assignee = currentUser()`.
 **GitHub.** Run `scripts/search_github.py` twice — once for PRs, once for commits. Add `--include-team` to fan out to every `team.members[].github_username` in addition to the user's handle. Results are annotated with each author's `display_name`.
 
 ```
-scripts/search_github.py prs --config config/user.json \
+scripts/search_github.py prs --config ${XDG_CONFIG_HOME:-$HOME/.config}/ai-weekly-update/user.json \
   --start <YYYY-MM-DD> --end <YYYY-MM-DD> \
   --state all --ai-filter --include-team
 
-scripts/search_github.py commits --config config/user.json \
+scripts/search_github.py commits --config ${XDG_CONFIG_HOME:-$HOME/.config}/ai-weekly-update/user.json \
   --start <YYYY-MM-DD> --end <YYYY-MM-DD> \
   --ai-filter --include-team
 ```
@@ -224,7 +235,7 @@ Tell the user: preview path + `approve` / `edit <column>: <change>` / `cancel`.
 **Side effects — the only phase that writes to Confluence:**
 - Strips `_skillAdded` sentinels: `scripts/parse_page.py strip-sentinels modified.json > publish.json`
 - Calls `updateConfluencePage` with the stripped body, version bumped.
-- Deletes local `.cache/<pageId>/` on success.
+- Deletes local `${XDG_CACHE_HOME:-$HOME/.cache}/ai-weekly-update/<pageId>/` on success.
 
 Rules:
 - Never publish on implicit cues ("thanks", "ok"). Require unambiguous approval.

@@ -13,14 +13,14 @@ Requires `gh` CLI installed and authenticated with `repo` scope.
 
 Usage:
   search_github.py prs \
-      --config config/user.json \
+      --config "${XDG_CONFIG_HOME:-$HOME/.config}/ai-weekly-update/user.json" \
       --start 2026-04-14 --end 2026-04-18 \
       [--state merged|open|all]     # default merged
       [--ai-filter]                 # restrict to AI-keyword matches
       [--dry-run]
 
   search_github.py commits \
-      --config config/user.json \
+      --config "${XDG_CONFIG_HOME:-$HOME/.config}/ai-weekly-update/user.json" \
       --start 2026-04-14 --end 2026-04-18 \
       [--ai-filter]
       [--dry-run]
