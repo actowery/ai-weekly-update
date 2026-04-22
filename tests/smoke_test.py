@@ -221,13 +221,15 @@ def test_render_preview():
 # ----- github dry-run -----
 
 def test_github_dry_run():
-    print("[search_github.py dry-run]")
+    print("[search_github.py dry-run, no team]")
     r = run(["python3", str(SEARCH_GH), "prs",
              "--config", str(FIX / "user-alex.json"),
              "--start", "2026-06-01", "--end", "2026-06-05",
              "--dry-run"], check=False)
     assert_eq(r.returncode, 0, "dry-run prs exits 0")
     assert_true(b"DRY-RUN" in r.stderr, "dry-run prints gh command")
+    # Personal-only mode: exactly one gh invocation.
+    assert_eq(r.stderr.count(b"DRY-RUN"), 1, "personal mode → 1 gh call")
 
     r2 = run(["python3", str(SEARCH_GH), "commits",
               "--config", str(FIX / "user-alex.json"),
@@ -235,6 +237,29 @@ def test_github_dry_run():
               "--dry-run"], check=False)
     assert_eq(r2.returncode, 0, "dry-run commits exits 0")
     assert_true(b"DRY-RUN" in r2.stderr, "dry-run commits prints gh command")
+
+
+def test_github_dry_run_with_team():
+    print("[search_github.py dry-run, --include-team]")
+    # Manager fixture has the user + 2 members-with-handles + 1 member-without.
+    # We expect 3 gh calls (user + 2 resolved handles), and a warn about the
+    # unresolved member.
+    r = run(["python3", str(SEARCH_GH), "prs",
+             "--config", str(FIX / "user-alex-manager.json"),
+             "--start", "2026-06-01", "--end", "2026-06-05",
+             "--include-team",
+             "--dry-run"], check=False)
+    assert_eq(r.returncode, 0, "team-mode dry-run exits 0")
+    assert_eq(r.stderr.count(b"DRY-RUN"), 3, "team-mode → 3 gh calls (user + 2 handles)")
+    assert_true(b"Unresolved Member" in r.stderr, "warns about member missing handle")
+
+    # Without --include-team on the manager fixture: back to 1 call.
+    r2 = run(["python3", str(SEARCH_GH), "prs",
+              "--config", str(FIX / "user-alex-manager.json"),
+              "--start", "2026-06-01", "--end", "2026-06-05",
+              "--dry-run"], check=False)
+    assert_eq(r2.stderr.count(b"DRY-RUN"), 1,
+              "manager fixture without --include-team stays personal-only")
 
 
 # ----- claude log scanner -----
@@ -292,6 +317,7 @@ def main():
     test_strip_sentinels()
     test_render_preview()
     test_github_dry_run()
+    test_github_dry_run_with_team()
     test_claude_log_scan_empty()
     test_claude_log_scan_synth()
     print("\nAll smoke tests passed.")

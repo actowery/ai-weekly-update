@@ -22,6 +22,14 @@ Per-user file, auto-produced by Phase 0 init and gitignored. Not meant to be han
   "jira_ai_labels": ["AI", "Claude", "Devx"],
   "scan_claude_logs": true,
   "claude_log_dir": "~/.claude/projects",
+  "team": {
+    "name": "DevX",
+    "members": [
+      {"display_name": "Member One", "atlassian_account_id": "...",
+       "slack_user_id": "...", "github_username": "memone",
+       "email": "member.one@company.com"}
+    ]
+  },
   "cached_at": "YYYY-MM-DD",
   "cache_source": "user_confirmed"
 }
@@ -31,6 +39,7 @@ Per-user file, auto-produced by Phase 0 init and gitignored. Not meant to be han
 - `ai_keywords`: post-filter on PR titles / commit messages / Slack text. Tune to your organization's vocabulary.
 - `display_name_overrides`: any alternate names your row might appear under (middle initial, nickname).
 - `scan_claude_logs`: if false, skip local log scanning entirely.
+- `team`: **optional**. Set only if the user manages a team and wants team activity included in the Wins draft. Members need at least `display_name`; whichever IDs are present enable the matching source (missing `github_username` → skip GitHub for that member, etc.).
 
 ## Jira
 
@@ -87,14 +96,17 @@ Skip auto-digests (e.g. Jira notification emails) when they don't add new signal
 
 Requires `gh` authenticated with `repo` scope. Two modes via `scripts/search_github.py`:
 
-**PRs — your authored PRs, optionally AI-filtered:**
+**PRs — authored PRs, optionally AI-filtered, optionally team-fanned-out:**
 ```
 scripts/search_github.py prs \
   --config config/user.json \
   --start <YYYY-MM-DD> --end <YYYY-MM-DD> \
   [--state merged|open|all] \
-  [--ai-filter]
+  [--ai-filter] \
+  [--include-team]
 ```
+
+Add `--include-team` to query every `team.members[].github_username` in addition to the user's handle. Results are deduplicated on PR URL; each result carries the `display_name` of the author so the drafting model can write "<name> shipped <PR>" sentences correctly.
 
 Run twice:
 1. `--state merged` (shipped work in window)
@@ -102,15 +114,36 @@ Run twice:
 
 Add `--ai-filter` to restrict to PRs whose title/body match your `ai_keywords` — use this for the AI-weekly draft. Run without the filter too to check for non-AI work you may still want to mention.
 
-**Commits — your authored commits in window:**
+**Commits — authored commits in window:**
 ```
 scripts/search_github.py commits \
   --config config/user.json \
   --start <YYYY-MM-DD> --end <YYYY-MM-DD> \
-  [--ai-filter]
+  [--ai-filter] \
+  [--include-team]
 ```
 
-Particularly valuable for finding `CLAUDE.md` changes, skill files, and AI integration commits that may not have their own PR (e.g. direct pushes, doc updates).
+Particularly valuable for finding `CLAUDE.md` changes, skill files, and AI integration commits that may not have their own PR (e.g. direct pushes, doc updates). With `--include-team`, surfaces team members' individual commits — a common case for "Brónach added `CLAUDE.md` to four repos this week" stories.
+
+## Team fan-out query patterns
+
+When `team.members[]` is present, the other three remote sources (Jira, Slack, Outlook) should also scale up. Outlook stays personal-only because Microsoft Graph search reads the authenticated user's mailbox only without delegated-access setup.
+
+**Jira — team+user assignee:**
+```jql
+assignee in (currentUser(), "<member1_account_id>", "<member2_account_id>", ...)
+AND (labels in (<jira_ai_labels>) OR text ~ "Claude" OR text ~ "Anthropic" OR text ~ "CLAUDE.md")
+AND updated >= "<start>" AND updated <= "<end>"
+```
+
+**Slack — team+user authored:**
+```
+(from:<@user_slack_id> OR from:<@member1_slack_id> OR from:<@member2_slack_id> ...)
+  (Claude OR Anthropic OR CLAUDE.md OR AI OR skill OR agent)
+  after:<start> before:<end>
+```
+
+When drafting, tag every finding with the `display_name` from the matching source so the Wins paragraph can attribute correctly.
 
 ## Claude Code logs
 

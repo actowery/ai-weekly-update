@@ -31,6 +31,26 @@ Notes:
 - Em-dash (`—`) and en-dash (`–`) used for flow; hyphens (`-`) only inside compound words or keys.
 - Inline `code` mark on the skill-command span only; repo and filename strings like `CLAUDE.md` are plain text here.
 
+## Manager-with-team variant
+
+When `team.members[]` is set, Wins becomes a weave of team + personal activity. Structure:
+
+1. **Team-level framing sentence** (if the log scan / activity is broad) — "Team continued heavy Claude adoption this week across PDK, Bolt, and CI repos."
+2. **Named specific wins** — use first names if unambiguous, full names if not. Cite keys/URLs inline.
+3. **Your own wins last**, as an equal peer — don't hide them, don't inflate them.
+
+**Manager-variant golden reference** (fictional):
+> Team shipped multiple Claude integrations this week: Alex merged `CLAUDE.md` into three service repos and unblocked the `ANTHROPIC_CODE_REVIEW_KEY` rollout (ITHELP-999); Jordan refactored CI provision in `platform-ci` to use the organizational forge token (PLAT-1234); Sam closed a customer escalation (CAT-888) with PDK + Claude assist. I shipped the `ai-weekly-update` skill v0.2.0, added team-fan-out so this very page gets drafted with team context, and hosted the cross-BU AI sync Wednesday.
+
+Four named people, four specific artifacts, one personal paragraph, ~75 words. The reader walks away with concrete evidence of team-wide AI adoption — not just the manager's activity.
+
+**Anti-patterns — do not emit these:**
+- `The team had a great week with AI.` — zero attribution, zero specifics.
+- `Everyone on the team shipped CLAUDE.md.` — overclaim; not literally true unless it is.
+- `Alex, Jordan, Sam, Brónach, David all did AI work.` — listing names without specifics is worse than not naming anyone.
+
+If a team member had no meaningful AI activity in the window per the research, don't list them — absence is fine. Don't fabricate generic "continued participating in AI channels" filler.
+
 ## Density targets by column
 
 | Column | Target |

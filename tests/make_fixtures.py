@@ -195,11 +195,32 @@ def make_user_config():
     }
 
 
+def make_user_config_with_team():
+    """Manager variant — has a team.members list for exercising fan-out."""
+    base = make_user_config()
+    base["team"] = {
+        "name": "Platform",
+        "members": [
+            {"display_name": "Taylor Example", "atlassian_account_id": "test-taylor-002",
+             "slack_user_id": "U_TAYLOR_TEST", "github_username": "taylor-example",
+             "email": "taylor@example.test"},
+            {"display_name": "Sam Example", "atlassian_account_id": "test-sam-003",
+             "slack_user_id": "U_SAM_TEST", "github_username": "sam-example",
+             "email": "sam@example.test"},
+            # Third member deliberately has no github_username to exercise the
+            # "skip with warn" path in search_github.
+            {"display_name": "Unresolved Member", "atlassian_account_id": "test-unres-004"},
+        ],
+    }
+    return base
+
+
 def main():
     FIX.mkdir(parents=True, exist_ok=True)
     (FIX / "empty-ai-weekly.json").write_text(json.dumps(_build_page(False), indent=2))
     (FIX / "filled-ai-weekly.json").write_text(json.dumps(_build_page(True), indent=2))
     (FIX / "user-alex.json").write_text(json.dumps(make_user_config(), indent=2))
+    (FIX / "user-alex-manager.json").write_text(json.dumps(make_user_config_with_team(), indent=2))
     print(f"Wrote fixtures to {FIX}")
 
 

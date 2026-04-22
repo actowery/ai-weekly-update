@@ -112,20 +112,55 @@ def normalize_pr(pr, display_name):
     }
 
 
-def cmd_prs(args):
-    cfg = load_config(args.config)
-    handle = cfg.get("github_username")
-    display_name = cfg.get("display_name", "")
-    orgs = (cfg.get("github") or {}).get("orgs") or []
-    if not handle:
+def handles_to_query(cfg, include_team):
+    """Return list of (github_username, display_name) tuples to search.
+
+    Always includes the primary user. If include_team is True and the config
+    has team.members[], each member with a github_username is appended.
+    Missing handles produce a warning and are skipped (not fatal).
+    """
+    pairs = []
+    primary = cfg.get("github_username")
+    if primary:
+        pairs.append((primary, cfg.get("display_name", "")))
+    else:
         print("error: config is missing github_username. Re-run init.", file=sys.stderr)
         sys.exit(2)
+
+    if include_team:
+        team = cfg.get("team") or {}
+        missing = []
+        for m in team.get("members") or []:
+            h = m.get("github_username")
+            if h:
+                pairs.append((h, m.get("display_name", "")))
+            else:
+                missing.append(m.get("display_name", "(unknown)"))
+        if missing:
+            print(f"warn: no github_username for team members: {', '.join(missing)}. "
+                  "Add via init to include them.", file=sys.stderr)
+
+    return pairs
+
+
+def cmd_prs(args):
+    cfg = load_config(args.config)
+    orgs = (cfg.get("github") or {}).get("orgs") or []
     if not args.dry_run and not have_gh():
         print("error: gh CLI not installed. https://cli.github.com/", file=sys.stderr)
         sys.exit(2)
 
-    prs = gh_search_prs(handle, orgs, args.start, args.end, args.state, args.dry_run)
-    normalized = [normalize_pr(pr, display_name) for pr in prs]
+    pairs = handles_to_query(cfg, args.include_team)
+    seen_urls = set()
+    normalized = []
+    for handle, display_name in pairs:
+        prs = gh_search_prs(handle, orgs, args.start, args.end, args.state, args.dry_run)
+        for pr in prs:
+            url = pr.get("url")
+            if url and url in seen_urls:
+                continue
+            seen_urls.add(url)
+            normalized.append(normalize_pr(pr, display_name))
 
     if args.ai_filter:
         rx = ai_keyword_regex(cfg)
@@ -187,18 +222,23 @@ def normalize_commit(c, display_name):
 
 def cmd_commits(args):
     cfg = load_config(args.config)
-    handle = cfg.get("github_username")
-    display_name = cfg.get("display_name", "")
     orgs = (cfg.get("github") or {}).get("orgs") or []
-    if not handle:
-        print("error: config is missing github_username. Re-run init.", file=sys.stderr)
-        sys.exit(2)
     if not args.dry_run and not have_gh():
         print("error: gh CLI not installed.", file=sys.stderr)
         sys.exit(2)
 
-    raw = gh_search_commits(handle, orgs, args.start, args.end, args.dry_run)
-    normalized = [normalize_commit(c, display_name) for c in raw]
+    pairs = handles_to_query(cfg, args.include_team)
+    seen = set()
+    normalized = []
+    for handle, display_name in pairs:
+        raw = gh_search_commits(handle, orgs, args.start, args.end, args.dry_run)
+        for c in raw:
+            sha = c.get("sha")
+            if sha and sha in seen:
+                continue
+            if sha:
+                seen.add(sha)
+            normalized.append(normalize_commit(c, display_name))
 
     if args.ai_filter:
         rx = ai_keyword_regex(cfg)
@@ -222,6 +262,8 @@ def main():
     pr.add_argument("--end", required=True)
     pr.add_argument("--state", default="merged", choices=["merged", "open", "all"])
     pr.add_argument("--ai-filter", action="store_true")
+    pr.add_argument("--include-team", action="store_true",
+                    help="Fan out to config.team.members[].github_username")
     pr.add_argument("--dry-run", action="store_true")
     pr.set_defaults(func=cmd_prs)
 
@@ -230,6 +272,8 @@ def main():
     pc.add_argument("--start", required=True)
     pc.add_argument("--end", required=True)
     pc.add_argument("--ai-filter", action="store_true")
+    pc.add_argument("--include-team", action="store_true",
+                    help="Fan out to config.team.members[].github_username")
     pc.add_argument("--dry-run", action="store_true")
     pc.set_defaults(func=cmd_commits)
 

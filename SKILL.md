@@ -1,6 +1,6 @@
 ---
 name: ai-weekly-update
-description: Fill in the current user's INDIVIDUAL row on a shared Confluence AI-usage weekly report (Champion Weekly Report or Manager Weekly Report tables — one row per person, with columns like "Wins this week", "Blockers", "What didn't work", "What mentees should try next"). Researches the window across Jira, Slack (public + private), Outlook, GitHub (PRs + commits + CLAUDE.md touches), and local Claude Code session logs to build a dense AI-focused draft, renders a local HTML preview, and publishes only after explicit approval. Use this skill whenever the user asks to fill their AI weekly, AI Champion report, AI Manager report, Puppet AI weekly, Delphix AI weekly, or pastes a Confluence URL titled "AI Weekly Report" — even if they don't explicitly say "skill" or "draft." Distinct from team-level weekly reports (see `weekly-confluence-update`): this one is per-individual, matches the user by plain-text NAME in the row's first cell, and focuses on AI adoption / Claude usage rather than general sprint work.
+description: Fill in the current user's row on a shared Confluence AI-usage weekly report (Champion Weekly Report or Manager Weekly Report tables — one row per person, with columns like "Wins this week", "Blockers", "What didn't work", "What mentees should try next"). Researches the window across Jira, Slack (public + private), Outlook, GitHub (PRs + commits + CLAUDE.md touches), and local Claude Code session logs to build a dense AI-focused draft, renders a local HTML preview, and publishes only after explicit approval. If the user is a manager with a team configured, also researches each team member's AI activity (Jira tickets, GitHub PRs/commits, Slack messages) and weaves team wins into the Wins paragraph alongside the user's own contributions. Use this skill whenever the user asks to fill their AI weekly, AI Champion report, AI Manager report, Puppet AI weekly, Delphix AI weekly, or pastes a Confluence URL titled "AI Weekly Report" — even if they don't explicitly say "skill" or "draft." Distinct from team-level weekly reports (see `weekly-confluence-update`): this one is per-individual row, matches the user by plain-text NAME in the row's first cell, and focuses on AI adoption / Claude usage rather than general sprint work.
 ---
 
 # AI Weekly Update
@@ -17,6 +17,7 @@ Designed for people reporting on their own (and their team's) AI / Claude adopti
 | Write `config/user.json` | Local write | Phase 0 init — path announced first |
 | Write `/tmp/ai-weekly-preview-*.html`, `modified.json`, drafts JSON, `.cache/` | Local writes | Phases 4, 6, 7 |
 | Read page / Jira / Slack / email / GitHub / local Claude session logs | Remote reads only | Phases 1, 4 |
+| Read team members' Jira / Slack / GitHub activity | Remote reads only | Phase 4, ONLY if `team.members` is set in `config/user.json` |
 | Run `open <path>` to launch browser | Local | Phase 7 |
 | Send messages, comment on tickets, post to Slack/email | **Never** | — |
 | Touch rows belonging to other people or divider rows (`Puppet`, `Delphix`) | **Never** | — |
@@ -54,16 +55,21 @@ Trigger: user says `init ai-weekly-update`, "set up my AI weekly config", or sim
 1. Call `atlassianUserInfo` once. Capture `name`, `email`, `account_id`.
 2. Resolve the user's Slack user ID via `slack_search_users`, confirming on email match.
 3. Resolve the user's GitHub handle — try `gh api "search/users?q=<email>"` first; if no match or ambiguous, ask.
-4. Ask the user once:
+4. Ask the user once (one batched question, all optional):
    ```
-   Slack search mode?  (public / public+private)
-   GitHub orgs to scope PR+commit searches?  (e.g. your-org)
-   AI-focused Jira labels/keywords?  (optional, defaults shown)
-   Scan local Claude Code session logs?  (yes / no — default yes)
+   Slack search mode?                      (public / public+private)
+   GitHub orgs to scope PR+commit searches? (e.g. your-org)
+   AI-focused Jira labels/keywords?         (optional, defaults shown)
+   Scan local Claude Code session logs?     (yes / no — default yes)
+   Are you a manager with a team?           (yes / no)
    ```
-5. Save `config/user.json` following the schema in `references/data-sources.md`. Announce the path before writing.
+5. If manager-yes:
+   - Check `~/.claude/skills/weekly-confluence-update/config/teams/*.json` — if any exist, offer to import one: "Found DevX roster at `weekly-confluence-update/config/teams/devx.json`. Use this for AI weekly team research too? (yes / name a different team / no — gather inline)"
+   - Otherwise ask for team member names; resolve each to Atlassian+Slack+GitHub IDs the same way the team-level skill does (parallel `lookupJiraAccountId` + `slack_search_users` + `gh api orgs/<org>/teams/<slug>/members` if the team has a GitHub team name).
+   - Store under `team.members` in `user.json`. Each member needs at minimum `display_name`; add whichever IDs we could resolve.
+6. Save `config/user.json` following the schema in `references/data-sources.md`. Announce the path before writing.
 
-Do not invent values. Empty answers are acceptable.
+Do not invent values. Empty answers are acceptable. If `team` is absent or empty, the skill runs in personal-only mode.
 
 ### Phase 1 — Identify the user and the page
 
@@ -109,32 +115,41 @@ Extract from the page title (e.g. `AI Weekly Report for 14 Apr - 18 Apr 2026`) v
 
 **Side effects:** read-only across all sources. Writes `.cache/<pageId>/<YYYY-MM-DD>/` locally.
 
-**Announce sources up front:**
-> Researching <window>. Sources: Jira (AI labels/keywords + your tickets), Slack (**public + private** per config), Outlook (AI keywords), GitHub (your PRs + commits + CLAUDE.md touches in orgs: <orgs>), Claude Code logs (~/.claude/projects/). Reply `public only` to downgrade Slack this run.
+**Announce sources up front, explicitly calling out team fan-out if present:**
+> Researching <window>. Sources: Jira (AI labels/keywords, you + team members <names if any>), Slack (**public + private** per config, you + team), Outlook (AI keywords, your inbox only), GitHub (PRs + commits in orgs: <orgs>, you + team), Claude Code logs (your local `~/.claude/projects/` only). Reply `public only` to downgrade Slack this run. Reply `no team` to run personal-only this run.
 
 Run these in parallel; cache results under `.cache/<pageId>/<YYYY-MM-DD>/`.
 
-**Jira.** Your issues involving AI or Claude:
+**Team-mode note:** if `config/user.json` has `team.members[]`, every remote query EXCEPT Outlook and Claude-Code-logs fans out to include team members. Outlook searches only the user's own mailbox (no delegated access). Claude Code logs are local to the user. Tag every result with the `display_name` of the member it came from.
+
+**Jira.** AI/Claude tickets assigned to you OR any team member:
 ```
-assignee = currentUser()
-AND (labels in ("AI","Claude","Devx") OR text ~ "Claude" OR text ~ "Anthropic" OR text ~ "CLAUDE.md")
+assignee in (currentUser(), <team_account_ids>)
+AND (labels in (<jira_ai_labels>) OR text ~ "Claude" OR text ~ "Anthropic" OR text ~ "CLAUDE.md")
 AND updated >= "<start>" AND updated <= "<end>"
 ```
-Also run without the assignee constraint to find AI-adjacent work where you're the reporter or watcher.
+If `team.members` is empty, drop the IN-list and use `assignee = currentUser()`. Also run a variant with `reporter in (...) OR watcher in (...)` to catch AI-adjacent tickets the team is shepherding rather than directly assigned.
 
-**Slack.** Three searches (mode per config):
-- Your AI-related messages: `from:<@your_slack_id> (Claude OR Anthropic OR "AI" OR skill OR CLAUDE.md) after:<start> before:<end>`
-- Team channels AI discussions: `(Claude OR Anthropic OR CLAUDE.md OR "AI adoption" OR agent OR /provision OR skill) in:<team channels> after:<start> before:<end>`
+**Slack.** Three searches (tool selected by `slack_search_mode`):
+- You + team AI-related messages: `(from:<@you> OR from:<@member_1> OR from:<@member_2> ...) (Claude OR Anthropic OR "AI" OR skill OR CLAUDE.md OR agent) after:<start> before:<end>`
+- Team channels AI discussions: `(Claude OR Anthropic OR CLAUDE.md OR "AI adoption" OR agent OR /provision OR skill) in:<team_channel> after:<start> before:<end>`
 - Direct AI discussion threads you participated in (if private search is on).
 
 **Outlook.** `DevX OR Claude OR Anthropic OR "CLAUDE.md" OR "AI agent" OR "AI adoption"` with date window.
 
-**GitHub.** Run `scripts/search_github.py` in three modes:
-- `--state merged` — your PRs that landed in window
-- `--state open` — your in-flight PRs
-- `--mode commits --grep "Claude|CLAUDE.md|anthropic"` — commits touching Claude integration in your team's orgs (not necessarily yours)
+**GitHub.** Run `scripts/search_github.py` twice — once for PRs, once for commits. Add `--include-team` to fan out to every `team.members[].github_username` in addition to the user's handle. Results are annotated with each author's `display_name`.
 
-Pull content preview for any PR/commit whose title or body mentions `CLAUDE.md`, `Claude`, `Anthropic`, `AI` — these are the story bullets for an AI weekly.
+```
+scripts/search_github.py prs --config config/user.json \
+  --start <YYYY-MM-DD> --end <YYYY-MM-DD> \
+  --state all --ai-filter --include-team
+
+scripts/search_github.py commits --config config/user.json \
+  --start <YYYY-MM-DD> --end <YYYY-MM-DD> \
+  --ai-filter --include-team
+```
+
+Run a second PR pass WITHOUT `--ai-filter` so you don't miss PRs whose titles don't match your keyword list but are substantively about AI integration (e.g. commits adding a `CLAUDE.md` file where the PR title is "docs/onboarding"). Use judgment when drafting.
 
 **Claude Code logs.** Run:
 ```
@@ -153,6 +168,14 @@ For each column the user owns (per Phase 2's map), synthesize content in the sty
 - **AI-focused** — lead with skills shipped, CLAUDE.md integrations, adoption stories, concrete Claude-usage numbers if the log scan surfaced them.
 - **Inline `code` marks** for slash commands, skill names, file paths (backtick-wrap in the draft text and the parser will apply marks).
 - **Every claim traces to a source.** Jira key, Slack link, PR number, log entry. No invention.
+
+**Manager-with-team mode** — Wins paragraph weaves personal + team activity naturally. Structure (see `references/output-style.md` for a full example):
+1. **Lead with team-level posture** — "Team continued heavy Claude adoption this week…" or similar framing if the log scan / activity is broad.
+2. **Name specific team members for specific wins** — "Brónach closed <X> in `bolt-private`; David refactored <Y>; Gavin unblocked <Z>." Use display names as they appear on the page (first name acceptable when unambiguous).
+3. **Add personal wins** — skills you shipped, adoption events you drove, cross-BU conversations you led.
+4. **Cite keys / URLs inline** — keep the source trail intact even when naming multiple people in one sentence.
+
+Do NOT claim credit ambiguously. If a team member shipped something, say so explicitly. The goal is to surface the team's AI adoption to leadership, not to compress it into first-person.
 
 ### Phase 6 — Build the modified ADF
 
