@@ -23,6 +23,20 @@ HERE = Path(__file__).parent
 FIX = HERE / "fixtures"
 
 
+# Deterministic localIds. Reset per-page-build so the two fixtures don't
+# share a monotonic counter (which would make them sensitive to build order).
+_COUNTER = [0]
+
+
+def _next_id(prefix):
+    _COUNTER[0] += 1
+    return f"{prefix}-{_COUNTER[0]:04d}"
+
+
+def _reset_counter():
+    _COUNTER[0] = 0
+
+
 def text(s, marks=None):
     n = {"type": "text", "text": s}
     if marks:
@@ -40,40 +54,41 @@ def code(s):
 
 def paragraph(*children):
     if not children:
-        return {"type": "paragraph", "attrs": {"localId": f"empty-{id(children)}"}}
+        return {"type": "paragraph", "attrs": {"localId": _next_id("p")}}
     return {"type": "paragraph", "content": list(children)}
 
 
-def empty_paragraph(local_id):
+def empty_paragraph(local_id=None):
     """Match the attr-only-paragraph shape used by Confluence for blank cells."""
-    return {"type": "paragraph", "attrs": {"localId": local_id}}
+    return {"type": "paragraph", "attrs": {"localId": local_id or _next_id("p")}}
 
 
 def header_cell(*children):
     return {"type": "tableHeader",
-            "attrs": {"colspan": 1, "rowspan": 1, "localId": f"th-{id(children)}"},
+            "attrs": {"colspan": 1, "rowspan": 1, "localId": _next_id("th")},
             "content": list(children)}
 
 
 def cell(*children, local_id=None):
     return {"type": "tableCell",
-            "attrs": {"colspan": 1, "rowspan": 1, "localId": local_id or f"tc-{id(children)}"},
+            "attrs": {"colspan": 1, "rowspan": 1, "localId": local_id or _next_id("tc")},
             "content": list(children)}
 
 
 def row(*cells, local_id=None):
     return {"type": "tableRow",
-            "attrs": {"localId": local_id or f"tr-{id(cells)}"},
+            "attrs": {"localId": local_id or _next_id("tr")},
             "content": list(cells)}
 
 
 def heading(level, s):
     return {"type": "heading",
-            "attrs": {"level": level, "localId": f"h-{level}-{s[:6]}"},
+            "attrs": {"level": level, "localId": _next_id(f"h{level}")},
             "content": [text(s)]}
 
 
 def _build_page(fill_alex):
+    _reset_counter()
     # Champion Weekly Report — 5 columns.
     champ_header = row(
         header_cell(paragraph(strong("Champion"))),
