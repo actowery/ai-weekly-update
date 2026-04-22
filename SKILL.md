@@ -97,12 +97,15 @@ Returns JSON listing every `tableRow` whose first-cell plain text (case-insensit
 
 If zero matches: tell the user and stop — don't guess. If the user's name has changed or they're in a table under a different heading, confirm before proceeding.
 
+**If `team.members[]` is configured**, also run `rows` once per team member's display_name to build a **self-reporting set**: team members who have their own row elsewhere on the page (typically in the Champion Weekly Report) are filling in their own glory and should NOT be attributed in the user's Wins paragraph. Record their display_names as `self_reporting_champions`; Phase 5 drafting will skip them. See the "Self-reporting rule" note in `references/output-style.md` for why this matters.
+
 Present the row(s) and column names to the user briefly so they can confirm the mapping. Example:
 ```
 Found your row in "Manager Weekly Report":
   Manager          = Adrian Towery
   Wins this week   → <empty, will draft>
   Blockers / concerns → <empty, will draft>
+Self-reporting champions on this page (will be excluded from team attribution): Greg Hardy
 ```
 
 ### Phase 3 — Determine date range
@@ -176,6 +179,8 @@ For each column the user owns (per Phase 2's map), synthesize content in the sty
 4. **Cite keys / URLs inline** — keep the source trail intact even when naming multiple people in one sentence.
 
 Do NOT claim credit ambiguously. If a team member shipped something, say so explicitly. The goal is to surface the team's AI adoption to leadership, not to compress it into first-person.
+
+**Self-reporting rule** — if a team member appears in the `self_reporting_champions` set built in Phase 2 (they have their own row on this page, usually in the Champion Weekly Report), **skip them entirely** in the manager's Wins paragraph. They get to tell their own story in their own row. Attributing their wins in the manager row duplicates content and steals their glory. Acceptable exceptions: mentioning a team member in a collaboration context where you're the driver ("led API-key escalation with Brónach and IT"), where the attribution is yours, not theirs.
 
 ### Phase 6 — Build the modified ADF
 

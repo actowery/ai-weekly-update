@@ -48,8 +48,11 @@ Four named people, four specific artifacts, one personal paragraph, ~75 words. T
 - `The team had a great week with AI.` — zero attribution, zero specifics.
 - `Everyone on the team shipped CLAUDE.md.` — overclaim; not literally true unless it is.
 - `Alex, Jordan, Sam, Brónach, David all did AI work.` — listing names without specifics is worse than not naming anyone.
+- **Any win attributed to a team member who has their own row on the same page** — they're self-reporting as a Champion, and the manager row should leave their attribution to them. Covering their work here duplicates content and reads as stolen glory.
 
 If a team member had no meaningful AI activity in the window per the research, don't list them — absence is fine. Don't fabricate generic "continued participating in AI channels" filler.
+
+**Self-reporting rule in action.** If Greg has his own Champion row on this week's page, do not write "Greg shipped X" in the manager row — even if the research surfaced a real, cite-able Greg win. The exception is collaboration context where you were the driver: "led API-key escalation with Brónach and IT" is fine because the attribution is yours; "Brónach closed the escalation" would duplicate her own row.
 
 ## Density targets by column
 
