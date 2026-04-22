@@ -1,5 +1,12 @@
 # ai-weekly-update
 
+> [!IMPORTANT]
+> **This repo is deprecated.** Active development has moved to [actowery/claude-skills](https://github.com/actowery/claude-skills), which consolidates this skill and its siblings under one roof. The canonical version of this skill now lives at [`skills/ai-weekly-update/`](https://github.com/actowery/claude-skills/tree/main/skills/ai-weekly-update) there.
+>
+> This repo remains readable for historical reference. No new releases or bug fixes will land here.
+
+---
+
 A Claude Code skill that fills the current user's **individual row** on a shared Confluence AI-usage weekly-report page (Champion or Manager tables). It researches the reporting window across Jira, Slack (public + private), Outlook, GitHub (PRs / commits / CLAUDE.md touches), and local Claude Code session logs, drafts dense AI-focused content into the user's columns, shows a local HTML preview, and only publishes after explicit approval.
 
 Companion to [weekly-confluence-update](https://github.com/actowery/weekly-confluence-update) (team-level). This one is per-individual and matches the user by plain-text name in the row's first cell — no `@mention` required on the page.
